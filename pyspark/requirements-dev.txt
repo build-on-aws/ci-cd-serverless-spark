@@ -1,1 +1,2 @@
 pytest==7.1.2
+pyspark==3.3.0
