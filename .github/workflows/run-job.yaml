@@ -1,0 +1,48 @@
+name: ETL Job
+
+env:
+  #### BEGIN: BE SURE TO REPLACE THESE VALUES
+  APPLICATION_ID: 00f5trm3rnk3hl09
+  S3_BUCKET_NAME: gh-actions-serverless-spark-123456789012
+  JOB_ROLE_ARN: arn:aws:iam::123456789012:role/gh-actions-job-execution-role-123456789012
+  OIDC_ROLE_ARN: arn:aws:iam::123456789012:role/gh-actions-oidc-role-123456789012
+  #### END:   BE SURE TO REPLACE THESE VALUES
+  AWS_REGION: us-east-1
+  JOB_VERSION: v0.0.1
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      job_version:
+        description: "What version (git tag) do you want to run?"
+        required: false
+        default: latest
+
+jobs:
+  extreme-weather:
+    runs-on: ubuntu-20.04
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: ./pyspark
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS credentials from Prod account
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ env.OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: actions-ecosystem/action-get-latest-tag@v1
+        id: get-latest-tag
+        if: ${{ github.event.inputs.job_version == 'latest' }}
+        with:
+          semver_only: true
+      - name: Start pyspark job
+        run: |
+          echo "running ${{ (steps.get-latest-tag.outputs.tag || github.event.inputs.job_version) || env.JOB_VERSION}} of our job"
+          bash scripts/run-job.sh $APPLICATION_ID $JOB_ROLE_ARN $S3_BUCKET_NAME ${{ (steps.get-latest-tag.outputs.tag || github.event.inputs.job_version) || env.JOB_VERSION}} entrypoint.py s3://${S3_BUCKET_NAME}/github/traffic/ s3://${S3_BUCKET_NAME}/github/output/views/
