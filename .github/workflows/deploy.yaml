@@ -1,0 +1,38 @@
+name: Package and Deploy Spark Job
+on:
+  # Only deploy these artifacts when a semantic tag is applied
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  #### BEGIN: BE SURE TO REPLACE THESE VALUES
+  S3_BUCKET_NAME: gh-actions-serverless-spark-prod-123456789012
+  OIDC_ROLE_ARN: arn:aws:iam::123456789012:role/gh-actions-oidc-role-123456789012
+  #### END:   BE SURE TO REPLACE THESE VALUES
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-20.04
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: ./pyspark
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ env.OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Copy pyspark file to S3
+        run: |
+          echo Uploading ${{github.ref_name}} to S3
+          zip -r job_files.zip jobs
+          aws s3 cp entrypoint.py s3://$S3_BUCKET_NAME/github/pyspark/jobs/${{github.ref_name}}/
+          aws s3 cp job_files.zip s3://$S3_BUCKET_NAME/github/pyspark/jobs/${{github.ref_name}}/
